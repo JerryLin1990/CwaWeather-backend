@@ -16,11 +16,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 /**
- * 取得新北市天氣預報
+ * 取得所有縣市天氣預報
  * CWA 氣象資料開放平臺 API
  * 使用「一般天氣預報-今明 36 小時天氣預報」資料集
  */
-const getNewTaipeiCityWeather = async (req, res) => {
+const getAllCountiesWeather = async (req, res) => {
   try {
     // 檢查是否有設定 API Key
     if (!CWA_API_KEY) {
@@ -37,74 +37,78 @@ const getNewTaipeiCityWeather = async (req, res) => {
       {
         params: {
           Authorization: CWA_API_KEY,
-          locationName: "新北市",
         },
       }
     );
 
-    // 取得新北市的天氣資料
-    const locationData = response.data.records.location[0];
+    // 取得所有縣市的天氣資料
+    const locations = response.data.records.location;
 
-    if (!locationData) {
+    if (!locations || locations.length === 0) {
       return res.status(404).json({
         error: "查無資料",
-        message: "無法取得新北市天氣資料",
+        message: "無法取得天氣資料",
       });
     }
 
-    // 整理天氣資料
-    const weatherData = {
-      city: locationData.locationName,
-      updateTime: response.data.records.datasetDescription,
-      forecasts: [],
-    };
-
-    // 解析天氣要素
-    const weatherElements = locationData.weatherElement;
-    const timeCount = weatherElements[0].time.length;
-
-    for (let i = 0; i < timeCount; i++) {
-      const forecast = {
-        startTime: weatherElements[0].time[i].startTime,
-        endTime: weatherElements[0].time[i].endTime,
-        weather: "",
-        rain: "",
-        minTemp: "",
-        maxTemp: "",
-        comfort: "",
-        windSpeed: "",
+    // 整理所有縣市的天氣資料
+    const allWeatherData = locations.map((locationData) => {
+      const weatherData = {
+        city: locationData.locationName,
+        updateTime: response.data.records.datasetDescription,
+        forecasts: [],
       };
 
-      weatherElements.forEach((element) => {
-        const value = element.time[i].parameter;
-        switch (element.elementName) {
-          case "Wx":
-            forecast.weather = value.parameterName;
-            break;
-          case "PoP":
-            forecast.rain = value.parameterName + "%";
-            break;
-          case "MinT":
-            forecast.minTemp = value.parameterName + "°C";
-            break;
-          case "MaxT":
-            forecast.maxTemp = value.parameterName + "°C";
-            break;
-          case "CI":
-            forecast.comfort = value.parameterName;
-            break;
-          case "WS":
-            forecast.windSpeed = value.parameterName;
-            break;
-        }
-      });
+      // 解析天氣要素
+      const weatherElements = locationData.weatherElement;
+      const timeCount = weatherElements[0].time.length;
 
-      weatherData.forecasts.push(forecast);
-    }
+      for (let i = 0; i < timeCount; i++) {
+        const forecast = {
+          startTime: weatherElements[0].time[i].startTime,
+          endTime: weatherElements[0].time[i].endTime,
+          weather: "",
+          rain: "",
+          minTemp: "",
+          maxTemp: "",
+          comfort: "",
+          windSpeed: "",
+        };
+
+        weatherElements.forEach((element) => {
+          const value = element.time[i].parameter;
+          switch (element.elementName) {
+            case "Wx":
+              forecast.weather = value.parameterName;
+              break;
+            case "PoP":
+              forecast.rain = value.parameterName + "%";
+              break;
+            case "MinT":
+              forecast.minTemp = value.parameterName + "°C";
+              break;
+            case "MaxT":
+              forecast.maxTemp = value.parameterName + "°C";
+              break;
+            case "CI":
+              forecast.comfort = value.parameterName;
+              break;
+            case "WS":
+              forecast.windSpeed = value.parameterName;
+              break;
+          }
+        });
+
+        weatherData.forecasts.push(forecast);
+      }
+
+      return weatherData;
+    });
 
     res.json({
       success: true,
-      data: weatherData,
+      count: allWeatherData.length,
+      data: allWeatherData,
     });
   } catch (error) {
     console.error("取得天氣資料失敗:", error.message);
@@ -131,7 +135,7 @@ app.get("/", (req, res) => {
   res.json({
     message: "歡迎使用 CWA 天氣預報 API",
     endpoints: {
-      newTaipeiCity: "/api/weather/NewTaipeiCity",
+      allCounties: "/api/weather/AllCounties",
       health: "/api/health",
     },
   });
@@ -141,8 +145,8 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "OK", timestamp: new Date().toISOString() });
 });
 
-// 取得新北市天氣預報
-app.get("/api/weather/NewTaipeiCity", getNewTaipeiCityWeather);
+// 取得所有縣市天氣預報
+app.get("/api/weather/AllCounties", getAllCountiesWeather);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
